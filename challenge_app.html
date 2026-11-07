@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>巴士見車就上 Challenge App | Hong Kong Bus Hop Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Tone.js for Sound Effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- Canvas Confetti for Victory Celebration -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        kmb: {
+                            red: '#D9232D',
+                            darkRed: '#9E121A',
+                            gold: '#F4B41A',
+                            dark: '#1C1917',
+                        },
+                        citybus: {
+                            yellow: '#FFD100',
+                            blue: '#0055A5',
+                        },
+                        busGreen: '#059669',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar & glassmorphism utilities */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .card-flip-enter {
+            animation: popIn 0.35s ease-out forwards;
+        }
+        @keyframes popIn {
+            0% { transform: scale(0.9) translateY(10px); opacity: 0; }
+            100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        .bus-badge {
+            background: linear-gradient(135deg, #d9232d 0%, #b91c1c 100%);
+            box-shadow: 0 4px 12px rgba(217, 35, 45, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans flex flex-col antialiased selection:bg-red-500 selection:text-white">
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3">
+        <div class="max-w-4xl mx-auto flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bus-badge flex items-center justify-center font-bold text-white text-xl shadow-lg border border-red-400/40">
+                    <i class="fa-solid font-bold fa-bus"></i>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-base sm:text-lg text-white leading-tight flex items-center gap-2">
+                        巴士見車就上 <span class="bg-amber-500/20 text-amber-400 text-xs px-2 py-0.5 rounded-full border border-amber-500/30">HK Bus Challenge</span>
+                    </h1>
+                    <p class="text-xs text-slate-400 hidden sm:block">隨機探索香港巴士旅行遊戲 App</p>
+                </div>
+            </div>
+
+            <!-- Timer & Status Pill -->
+            <div class="flex items-center gap-2">
+                <div id="gameTimerBadge" class="bg-slate-800/90 border border-slate-700 px-3 py-1.5 rounded-xl flex items-center gap-2 text-sm font-mono font-bold text-amber-400">
+                    <i class="fa-solid fa-stopwatch text-slate-400 text-xs"></i>
+                    <span id="timerDisplay">08:00:00</span>
+                </div>
+                <button onclick="openNewGameModal()" class="bg-red-600 hover:bg-red-500 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-semibold shadow-md transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span class="hidden xs:inline">開新一局</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- TAB NAVIGATION -->
+    <nav class="bg-slate-900/60 border-b border-slate-800/80 sticky top-[61px] z-20">
+        <div class="max-w-4xl mx-auto flex overflow-x-auto no-scrollbar px-2 py-1.5 gap-1 text-xs font-medium">
+            <button onclick="switchTab('cards')" id="tabBtn-cards" class="tab-btn active text-amber-400 bg-slate-800/90 px-3.5 py-2 rounded-lg flex items-center gap-2 whitespace-nowrap transition">
+                <i class="fa-solid fa-cards-blank"></i> 抽遊戲卡
+            </button>
+            <button onclick="switchTab('log')" id="tabBtn-log" class="tab-btn text-slate-400 hover:text-slate-200 px-3.5 py-2 rounded-lg flex items-center gap-2 whitespace-nowrap transition">
+                <i class="fa-solid fa-route"></i> 路線紀錄 (<span id="logCountBadge">0</span>)
+            </button>
+            <button onclick="switchTab('expenses')" id="tabBtn-expenses" class="tab-btn text-slate-400 hover:text-slate-200 px-3.5 py-2 rounded-lg flex items-center gap-2 whitespace-nowrap transition">
+                <i class="fa-solid fa-wallet"></i> 消費記帳 (<span id="expenseTotalBadge">$0.0</span>)
+            </button>
+            <button onclick="switchTab('gallery')" id="tabBtn-gallery" class="tab-btn text-slate-400 hover:text-slate-200 px-3.5 py-2 rounded-lg flex items-center gap-2 whitespace-nowrap transition">
+                <i class="fa-solid fa-book-open"></i> 卡牌圖鑑
+            </button>
+            <button onclick="switchTab('summary')" id="tabBtn-summary" class="tab-btn text-slate-400 hover:text-slate-200 px-3.5 py-2 rounded-lg flex items-center gap-2 whitespace-nowrap transition">
+                <i class="fa-solid fa-trophy"></i> 今局回顧
+            </button>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="max-w-4xl mx-auto w-full flex-1 p-3 sm:p-5">
+
+        <!-- GAME STATUS BANNER -->
+        <div id="gameStatusHeader" class="glass-card rounded-2xl p-4 mb-4 border border-slate-700/60 shadow-xl relative overflow-hidden">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 relative z-10">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span id="gameStatusBadge" class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-xs px-2.5 py-0.5 rounded-full font-semibold">
+                            進行中
+                        </span>
+                        <span id="winRuleBadge" class="bg-slate-800 text-slate-300 border border-slate-700 text-xs px-2 py-0.5 rounded-full">
+                            要啱啱好到終點先贏
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm pt-1">
+                        <div class="flex items-center gap-1.5 text-slate-300">
+                            <i class="fa-solid fa-location-dot text-emerald-400"></i>
+                            <span class="text-xs text-slate-400">起點區:</span>
+                            <span id="startStationDisplay" class="font-bold text-white">未設定</span>
+                        </div>
+                        <i class="fa-solid fa-arrow-right text-slate-600 text-xs"></i>
+                        <div class="flex items-center gap-1.5 text-slate-300">
+                            <i class="fa-solid fa-flag-checkered text-amber-400"></i>
+                            <span class="text-xs text-slate-400">終點區:</span>
+                            <span id="endStationDisplay" class="font-bold text-white">未設定</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <button onclick="toggleAudio()" id="audioToggleBtn" class="bg-slate-800 border border-slate-700 text-slate-300 hover:text-white p-2.5 rounded-xl text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-volume-high text-amber-400"></i>
+                    </button>
+                    <button onclick="markDestinationReached()" id="reachDestBtn" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-lg transition flex items-center gap-2">
+                        <i class="fa-solid fa-circle-check"></i> 我已到終點區落車！
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 1: DRAW CARDS & ACTIVE TASK -->
+        <section id="tab-cards" class="space-y-5">
+            <!-- Setup Prompt banner if not started -->
+            <div id="unstartedPrompt" class="glass-card rounded-2xl p-6 text-center space-y-4 border border-amber-500/30">
+                <div class="w-16 h-16 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center mx-auto text-3xl">
+                    <i class="fa-solid fa-map-location-dot"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-white mb-1">未抽起點區同終點區</h2>
+                    <p class="text-slate-400 text-sm max-w-md mx-auto">
+                        按下下面個掣隨機抽取香港 18 行政區作為今局起點區與終點區，到達起點地區後開計時器，抽卡開始探索！
+                    </p>
+                </div>
+                <button onclick="openNewGameModal()" class="bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold px-6 py-3 rounded-xl shadow-lg transition transform active:scale-95 flex items-center justify-center gap-2 mx-auto">
+                    <i class="fa-solid fa-shuffle"></i> 抽起點與終點地區 (開新局)
+                </button>
+            </div>
+
+            <!-- Active Card Container -->
+            <div id="activeCardContainer" class="hidden">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-semibold text-slate-400 flex items-center gap-2">
+                        <i class="fa-solid fa-thumbtack text-amber-400"></i> 當前抽到嘅遊戲任務
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <span id="rerollCoinBadge" class="bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs px-2.5 py-1 rounded-lg font-medium flex items-center gap-1">
+                            <i class="fa-solid fa-coins"></i> 幸運金幣: <span id="coinCount">1</span>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Main Challenge Card Graphic -->
+                <div id="currentCardElement" class="glass-card rounded-3xl p-6 sm:p-8 border-2 border-slate-700/80 shadow-2xl relative overflow-hidden transition-all duration-300 card-flip-enter">
+                    <div class="absolute -right-10 -bottom-10 opacity-5 text-white text-9xl pointer-events-none">
+                        <i id="cardBgIcon" class="fa-solid fa-bus"></i>
+                    </div>
+
+                    <div class="flex items-start justify-between gap-4 mb-4">
+                        <div class="flex items-center gap-3">
+                            <div id="cardIconBox" class="w-14 h-14 rounded-2xl bg-gradient-to-br from-red-600 to-amber-600 flex items-center justify-center text-2xl text-white shadow-lg">
+                                <i class="fa-solid fa-bus"></i>
+                            </div>
+                            <div>
+                                <span id="cardRarityBadge" class="text-[10px] uppercase font-black px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                    COMMON
+                                </span>
+                                <h2 id="cardTitle" class="text-2xl font-extrabold text-white leading-tight mt-0.5">
+                                    巴士見車就上
+                                </h2>
+                            </div>
+                        </div>
+
+                        <span id="cardCategoryBadge" class="bg-slate-800 text-slate-300 text-xs px-3 py-1 rounded-xl border border-slate-700">
+                            乘車任務
+                        </span>
+                    </div>
+
+                    <!-- Task Description -->
+                    <div class="bg-slate-900/80 rounded-2xl p-4 border border-slate-800/80 mb-6 space-y-2">
+                        <p id="cardDescription" class="text-slate-200 text-base leading-relaxed font-medium">
+                            上身邊第一架到達嘅巴士！乘搭 3 個站落車。
+                        </p>
+                        <div id="cardRuleNotice" class="text-xs text-amber-400/90 flex items-center gap-1.5 pt-1 border-t border-slate-800">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <span>提示：做完呢張牌嘅要求，先可以抽下一張卡！</span>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button onclick="openAddLogModal()" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-circle-check text-lg"></i> 完成任務並記低行程
+                        </button>
+                        <button onclick="drawCard()" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-semibold py-3.5 px-4 rounded-xl border border-slate-700 transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-forward text-amber-400"></i> 跳過/抽下一張牌
+                        </button>
+                    </div>
+
+                    <!-- Reroll button -->
+                    <div class="mt-3 flex justify-end">
+                        <button onclick="useRerollCoin()" class="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 rounded-lg transition">
+                            <i class="fa-solid fa-coins"></i> 使用幸運金幣重抽牌
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pre-start Draw or Extra Card Control -->
+            <div id="drawControlBar" class="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900/80 p-4 rounded-2xl border border-slate-800">
+                <div>
+                    <h4 class="font-bold text-sm text-slate-200">準備開車抽牌？</h4>
+                    <p class="text-xs text-slate-400">每次做完手上張牌，先再撳下面抽下一張。</p>
+                </div>
+                <button onclick="drawCard()" id="mainDrawCardBtn" class="w-full sm:w-auto bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 active:scale-95 text-white font-extrabold px-6 py-3 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-cards"></i> 抽取遊戲卡
+                </button>
+            </div>
+
+            <!-- Recent Hop Log Snippet -->
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-semibold text-slate-400 flex items-center gap-2">
+                        <i class="fa-solid fa-clock-rotate-left"></i> 今局近況紀錄
+                    </h3>
+                    <button onclick="switchTab('log')" class="text-xs text-amber-400 hover:underline">睇全部</button>
+                </div>
+
+                <div id="recentHopList" class="space-y-2">
+                    <div class="text-center py-6 text-slate-500 text-xs glass-card rounded-2xl">
+                        仲未有車程紀錄，完成第一個任務後下記低路線！
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: JOURNEY LOG (路線與紀錄) -->
+        <section id="tab-log" class="hidden space-y-4">
+            <div class="flex items-center justify-between bg-slate-900/80 p-4 rounded-2xl border border-slate-800">
+                <div>
+                    <h3 class="font-bold text-slate-200 text-base">乘車行程紀錄</h3>
+                    <p class="text-xs text-slate-400">總共搭咗 <span id="statStopsTotal" class="text-amber-400 font-bold">0</span> 個站 / <span id="statRoutesTotal" class="text-amber-400 font-bold">0</span> 條路線</p>
+                </div>
+                <button onclick="openAddLogModal()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-md">
+                    <i class="fa-solid fa-plus"></i> 手動加記錄
+                </button>
+            </div>
+
+            <div id="fullJourneyTimeline" class="space-y-3">
+                <!-- Timeline items rendered dynamically -->
+            </div>
+        </section>
+
+        <!-- TAB 3: EXPENSE TRACKER (消費記帳) -->
+        <section id="tab-expenses" class="hidden space-y-4">
+            <!-- Expense Summary Cards -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="glass-card p-3 rounded-2xl border border-slate-800 text-center">
+                    <span class="text-[10px] text-slate-400 block font-semibold uppercase">總支出</span>
+                    <span id="expSummaryTotal" class="text-lg font-black text-amber-400">$0.0</span>
+                </div>
+                <div class="glass-card p-3 rounded-2xl border border-slate-800 text-center">
+                    <span class="text-[10px] text-slate-400 block font-semibold uppercase">🚌 巴士車費</span>
+                    <span id="expSummaryBus" class="text-lg font-bold text-red-400">$0.0</span>
+                </div>
+                <div class="glass-card p-3 rounded-2xl border border-slate-800 text-center">
+                    <span class="text-[10px] text-slate-400 block font-semibold uppercase">🍔 美食補給</span>
+                    <span id="expSummaryFood" class="text-lg font-bold text-emerald-400">$0.0</span>
+                </div>
+                <div class="glass-card p-3 rounded-2xl border border-slate-800 text-center">
+                    <span class="text-[10px] text-slate-400 block font-semibold uppercase">🛍️ 其他/購物</span>
+                    <span id="expSummaryOther" class="text-lg font-bold text-sky-400">$0.0</span>
+                </div>
+            </div>
+
+            <!-- Add Expense Form Card -->
+            <div class="glass-card p-4 rounded-2xl border border-slate-800 space-y-3">
+                <h4 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+                    <i class="fa-solid fa-plus-circle text-amber-400"></i> 新增消費紀錄
+                </h4>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="text-[11px] text-slate-400 block mb-1 font-medium">金額 (HKD $)</label>
+                        <input type="number" id="expInputAmount" step="0.5" placeholder="例如: 12.8" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="text-[11px] text-slate-400 block mb-1 font-medium">類別</label>
+                        <select id="expInputCategory" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500">
+                            <option value="bus">🚌 車費 (Bus Fare)</option>
+                            <option value="food">🍔 美食/飲品 (Food & Drink)</option>
+                            <option value="shopping">🛍️ 購物 (Shopping)</option>
+                            <option value="other">🪙 其他 (Other)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[11px] text-slate-400 block mb-1 font-medium">備註 (備選)</label>
+                        <input type="text" id="expInputNote" placeholder="例如: 九巴268C 車費" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500">
+                    </div>
+                </div>
+                <button onclick="addExpenseRecord()" class="w-full bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-floppy-disk"></i> 儲存筆費用
+                </button>
+            </div>
+
+            <!-- Expense List -->
+            <div id="expenseHistoryList" class="space-y-2">
+                <!-- Rendered dynamically -->
+            </div>
+        </section>
+
+        <!-- TAB 4: CARD GALLERY (卡牌圖鑑) -->
+        <section id="tab-gallery" class="hidden space-y-4">
+            <div class="bg-slate-900/80 p-4 rounded-2xl border border-slate-800">
+                <h3 class="font-bold text-slate-200 text-base mb-1">遊戲卡完整圖鑑</h3>
+                <p class="text-xs text-slate-400">收錄全部 16 張「巴士見車就上」隨機挑戰卡牌與細則規則。</p>
+            </div>
+            <div id="galleryGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <!-- Dynamic Card Gallery -->
+            </div>
+        </section>
+
+        <!-- TAB 5: GAME RECAP & SHARE (今局回顧) -->
+        <section id="tab-summary" class="hidden space-y-5">
+            <div id="recapCard" class="glass-card rounded-3xl p-6 border border-slate-700 space-y-6 shadow-2xl relative overflow-hidden">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+                    <div>
+                        <span class="text-xs font-semibold text-amber-400">GAME RECAP</span>
+                        <h2 class="text-xl font-black text-white">「巴士見車就上」戰報結算</h2>
+                    </div>
+                    <div id="recapResultBadge" class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-bold">
+                        挑戰成功！
+                    </div>
+                </div>
+
+                <!-- Main Stats Grid -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                    <div class="bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+                        <span class="text-[10px] text-slate-400 block">總耗時</span>
+                        <span id="recapDuration" class="text-base font-bold text-amber-400">00:00:00</span>
+                    </div>
+                    <div class="bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+                        <span class="text-[10px] text-slate-400 block">乘搭總站數</span>
+                        <span id="recapStops" class="text-base font-bold text-emerald-400">0 站</span>
+                    </div>
+                    <div class="bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+                        <span class="text-[10px] text-slate-400 block">乘搭路線數</span>
+                        <span id="recapRoutes" class="text-base font-bold text-sky-400">0 條</span>
+                    </div>
+                    <div class="bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+                        <span class="text-[10px] text-slate-400 block">總開支</span>
+                        <span id="recapExpense" class="text-base font-bold text-red-400">$0.0</span>
+                    </div>
+                </div>
+
+                <!-- Path Overview -->
+                <div class="bg-slate-900/70 p-4 rounded-2xl border border-slate-800 space-y-2">
+                    <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider">今局經過路線軌跡</h4>
+                    <p id="recapPathText" class="text-xs text-slate-300 leading-relaxed font-mono">
+                        未有紀錄
+                    </p>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                    <button onclick="copyRecapMarkdown()" class="w-full sm:w-1/2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3 px-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2 text-xs">
+                        <i class="fa-solid fa-copy"></i> 複製遊戲 Markdown 文字紀錄
+                    </button>
+                    <button onclick="openNewGameModal()" class="w-full sm:w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3 px-4 rounded-xl border border-slate-700 transition flex items-center justify-center gap-2 text-xs">
+                        <i class="fa-solid fa-rotate-right"></i> 再開一局
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- NEW GAME SETUP MODAL -->
+    <div id="newGameModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-card max-w-lg w-full rounded-3xl p-6 border border-slate-700 shadow-2xl space-y-5 animate-popIn">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="font-extrabold text-lg text-white flex items-center gap-2">
+                    <i class="fa-solid fa-map-location-dot text-red-500"></i> 設定今局起點與終點地區
+                </h3>
+                <button onclick="closeNewGameModal()" class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Setup Form -->
+            <div class="space-y-4 text-xs">
+                <!-- Random Draw Button -->
+                <button onclick="randomizeStartAndEnd()" class="w-full bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black py-3 rounded-xl shadow-lg transition flex items-center justify-center gap-2 text-sm">
+                    <i class="fa-solid fa-dice"></i> 隨機抽取起點區同終點區
+                </button>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                    <div>
+                        <label class="block text-slate-400 font-semibold mb-1">今局起點地區 (Start District)</label>
+                        <select id="modalStartSelect" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white font-medium focus:border-amber-500">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 font-semibold mb-1">今局終點地區 (End District)</label>
+                        <select id="modalEndSelect" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white font-medium focus:border-amber-500">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Win Condition -->
+                <div class="space-y-2 pt-2">
+                    <label class="block text-slate-400 font-semibold">勝出條件 (Win Condition)</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <label class="bg-slate-900 p-3 rounded-xl border border-slate-800 flex items-start gap-2 cursor-pointer hover:border-amber-500/50">
+                            <input type="radio" name="winRuleOption" value="exact" checked class="mt-0.5 text-amber-500 focus:ring-0">
+                            <div>
+                                <span class="font-bold text-slate-200 block">要啱啱好到終點地區</span>
+                                <span class="text-[10px] text-slate-400">做足牌面需求且正好到達終點區先算勝出</span>
+                            </div>
+                        </label>
+                        <label class="bg-slate-900 p-3 rounded-xl border border-slate-800 flex items-start gap-2 cursor-pointer hover:border-amber-500/50">
+                            <input type="radio" name="winRuleOption" value="pass" class="mt-0.5 text-amber-500 focus:ring-0">
+                            <div>
+                                <span class="font-bold text-slate-200 block">途經終點地區即可當勝出</span>
+                                <span class="text-[10px] text-slate-400">進入終點地區範圍落車即可勝出</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Time limit -->
+                <div>
+                    <label class="block text-slate-400 font-semibold mb-1">時限設定 (Time Limit)</label>
+                    <select id="modalTimeLimit" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white font-medium focus:border-amber-500">
+                        <option value="28800" selected>8 小時 (標準 Challenge 8 Hours)</option>
+                        <option value="21600">6 小時 (6 Hours)</option>
+                        <option value="14400">4 小時 (4 Hours)</option>
+                        <option value="7200">2 小時 (速戰速決 2 Hours)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button onclick="closeNewGameModal()" class="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 transition">
+                    取消
+                </button>
+                <button onclick="confirmStartGame()" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black shadow-lg transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-play"></i> 到達起點區，開始計時！
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADD HOP LOG MODAL -->
+    <div id="addLogModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-card max-w-md w-full rounded-3xl p-6 border border-slate-700 shadow-2xl space-y-4 animate-popIn">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="font-extrabold text-base text-white flex items-center gap-2">
+                    <i class="fa-solid fa-route text-amber-400"></i> 記低呢搭車行程
+                </h3>
+                <button onclick="closeAddLogModal()" class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-slate-400 font-semibold mb-1">巴士路線編號</label>
+                    <input type="text" id="logInputRoute" placeholder="例如: 九巴 290A / 城巴 780" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:border-amber-500">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-slate-400 font-semibold mb-1">上車站名</label>
+                        <input type="text" id="logInputFrom" placeholder="例如: 彩虹轉車站" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 font-semibold mb-1">落車站名</label>
+                        <input type="text" id="logInputTo" placeholder="例如: 荃灣西站" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:border-amber-500">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-slate-400 font-semibold mb-1">乘搭站數</label>
+                        <input type="number" id="logInputStops" min="1" value="3" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 font-semibold mb-1">車費 (HKD $)</label>
+                        <input type="number" id="logInputFare" step="0.5" placeholder="例如: 10.7" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:border-amber-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-slate-400 font-semibold mb-1">筆記 / 沿途觀察 (選填)</label>
+                    <input type="text" id="logInputNote" placeholder="例如: 坐上層頭排風景超好！" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:border-amber-500">
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button onclick="closeAddLogModal()" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 transition">
+                    取消
+                </button>
+                <button onclick="saveHopLogRecord()" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-lg transition">
+                    儲存車程
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DICE ROLL MODAL -->
+    <div id="diceModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-card max-w-xs w-full rounded-3xl p-6 border border-slate-700 shadow-2xl text-center space-y-4 animate-popIn">
+            <h3 class="font-extrabold text-base text-white">🎲 擲骰子決定乘搭站數</h3>
+            <div id="diceBox" class="w-24 h-24 bg-gradient-to-br from-amber-500 to-red-600 rounded-2xl flex items-center justify-center text-5xl text-white font-black mx-auto shadow-2xl border-2 border-amber-300">
+                ?
+            </div>
+            <p id="diceResultText" class="text-xs text-slate-300">按下下面按鈕開始擲骰！</p>
+            <button onclick="rollDiceAnim()" id="rollDiceBtn" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2.5 rounded-xl transition">
+                擲骰子！
+            </button>
+            <button onclick="closeDiceModal()" class="text-xs text-slate-400 hover:text-white block mx-auto">關閉</button>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toastNotification" class="fixed bottom-5 right-5 z-50 bg-slate-800 border border-slate-700 text-slate-100 px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 max-w-sm transition-all duration-300 translate-y-20 opacity-0 pointer-events-none">
+        <div id="toastIcon" class="text-amber-400 text-xl">
+            <i class="fa-solid fa-circle-info"></i>
+        </div>
+        <div class="text-xs">
+            <h5 id="toastTitle" class="font-bold text-white">提示</h5>
+            <p id="toastMessage" class="text-slate-300">訊息內容</p>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        /* ==========================================================================
+           HONG KONG 18 DISTRICTS DATABASE
+           ========================================================================== */
+        const HK_DISTRICTS = [
+            "中西區 Central & Western (中環/上環/西環)",
+            "灣仔區 Wan Chai (灣仔/銅鑼灣/跑馬地)",
+            "東區 Eastern (北角/鰂魚涌/柴灣)",
+            "南區 Southern (香港仔/赤柱/黃竹坑)",
+            "油尖旺區 Yau Tsim Mong (尖沙咀/旺角/油麻地)",
+            "深水埗區 Sham Shui Po (深水埗/長沙灣/荔枝角)",
+            "九龍城區 Kowloon City (九龍城/土瓜灣/紅磡)",
+            "黃大仙區 Wong Tai Sin (黃大仙/樂富/慈雲山)",
+            "觀塘區 Kwun Tong (觀塘/九龍灣/油塘)",
+            "葵青區 Kwai Tsing (葵芳/青衣/葵涌)",
+            "荃灣區 Tsuen Wan (荃灣/深井/石圍角)",
+            "屯門區 Tuen Mun (屯門市中心/碼頭/藍地)",
+            "元朗區 Yuen Long (元朗/天水圍/錦田)",
+            "北區 North District (上水/粉嶺)",
+            "大埔區 Tai Po (大埔墟/太和)",
+            "沙田區 Sha Tin (沙田/馬鞍山/火炭)",
+            "西貢區 Sai Kung (將軍澳/西貢市)",
+            "離島區 Islands (赤鱲角機場/東涌/昂坪)"
+        ];
+
+        /* ==========================================================================
+           CHALLENGE CARDS DATABASE (16 Cards)
+           ========================================================================== */
+        const CARD_DECK = [
+            {
+                id: 'c1',
+                title: '巴士見車就上',
+                icon: 'fa-bus',
+                category: '乘車任務',
+                rarity: 'Common',
+                badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+                desc: '喺現時巴士站，身邊第一架到達嘅巴士，邊架先到就上邊架！乘搭 3 個站落車。',
+                rule: '若為單向總站，上首班開出之路線即可。'
+            },
+            {
+                id: 'c2',
+                title: '上層頭排觀光',
+                icon: 'fa-eye',
+                category: '座席挑戰',
+                rarity: 'Common',
+                badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+                desc: '上下一架到的雙層巴士，並成功搶佔「上層頭排」座位！連搭 4 個站欣賞視野；若頭排已被坐滿，罰下站落車！',
+                rule: '頭排滿座時需提早落車。'
+            },
+            {
+                id: 'c3',
+                title: '轉車站過河',
+                icon: 'fa-bridge-water',
+                category: '過海/快速',
+                rarity: 'Rare',
+                badgeColor: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
+                desc: '前往最近的巴士轉車站（如屯轉/大老山/紅隧/西隧），轉乘任意一條過海或跨區幹線搭 3 個站！',
+                rule: '需於轉車站進行轉乘。'
+            },
+            {
+                id: 'c4',
+                title: '總站坐到尾',
+                icon: 'fa-flag-checkered',
+                category: '極限長途',
+                rarity: 'Epic',
+                badgeColor: 'bg-purple-500/20 text-purple-400 border-purple-500/40',
+                desc: '上了下一架到達的巴士後，不論路線有多遠，一路坐到該路線的終點總站！',
+                rule: '直接乘坐至終點站。'
+            },
+            {
+                id: 'c5',
+                title: '幸運金幣',
+                icon: 'fa-coins',
+                category: '特殊道具',
+                rarity: 'Epic',
+                badgeColor: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
+                desc: '恭喜抽到幸運金幣！獲得 1 枚幸運金幣。你可以選擇即時免費重抽一張牌，或留待之後抵消一次懲罰。',
+                rule: '金幣會加入帳戶備用。'
+            },
+            {
+                id: 'c6',
+                title: '步轉另一街',
+                icon: 'fa-shoe-prints',
+                category: '步行轉站',
+                rarity: 'Common',
+                badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+                desc: '離開目前巴士站，徒步 5 至 10 分鐘到鄰近另一條街道的巴士站，再抽下一張牌上車。',
+                rule: '體驗不同街道的車站。'
+            },
+            {
+                id: 'c7',
+                title: '過馬路掉頭',
+                icon: 'fa-arrow-rotate-left',
+                category: '方向掉頭',
+                rarity: 'Common',
+                badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+                desc: '過馬路去對面巴士站，搭乘相反方向的任意巴士 3 個站！',
+                rule: '掉頭反方向搭乘。'
+            },
+            {
+                id: 'c8',
+                title: '路線尾數匹配',
+                icon: 'fa-hashtag',
+                category: '號碼匹配',
+                rarity: 'Common',
+                badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+                desc: '只能上下一架路線編號「尾數為雙數 (0,2,4,6,8)」的巴士，乘搭 4 個站！',
+                rule: '若到達之巴士為單數需等待下一班。'
+            },
+            {
+                id: 'c9',
+                title: '特快 X-Line 幹線',
+                icon: 'fa-bolt',
+                category: '特快快線',
+                rarity: 'Rare',
+                badgeColor: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
+                desc: '必須搭乘帶有「X」、「E」或「A」字尾的特快/機場/特快巴士路線，乘搭 4 個站！',
+                rule: '如 268X, A21, E33 等。'
+            },
+            {
+                id: 'c10',
+                title: '補給休息站',
+                icon: 'fa-utensils',
+                category: '美食補給',
+                rarity: 'Common',
+                badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+                desc: '在目前巴士站或附近便利店/小食店買一杯飲品或小食（$20港幣內），享用完後再繼續行程！',
+                rule: '記得在「消費記帳」記低此費用。'
+            },
+            {
+                id: 'c11',
+                title: '擲骰決定站數',
+                icon: 'fa-dice-d6',
+                category: '隨機骰子',
+                rarity: 'Rare',
+                badgeColor: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
+                desc: '按下 App 內的擲骰子功能，擲出的點數（1 - 6）即為你乘搭下一架巴士的站數！',
+                rule: '依據骰子點數乘搭。'
+            },
+            {
+                id: 'c12',
+                title: '地標打卡小任務',
+                icon: 'fa-camera',
+                category: '打卡任務',
+                rarity: 'Common',
+                badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+                desc: '在目前落車的巴士站牌或 nearby 地標拍攝一張打卡相片，然後上下一架巴士搭 2 個站。',
+                rule: '可記錄於手機相冊。'
+            },
+            {
+                id: 'c13',
+                title: '下層企位體驗',
+                icon: 'fa-person-dots-from-line',
+                category: '企位體驗',
+                rarity: 'Common',
+                badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+                desc: '在上車後於巴士下層企位乘搭 3 個站，觀察車廂乘客與沿途都市風景。',
+                rule: '注意安全握緊扶手。'
+            },
+            {
+                id: 'c14',
+                title: '終點衝刺直通車',
+                icon: 'fa-rocket',
+                category: '直通終點',
+                rarity: 'Epic',
+                badgeColor: 'bg-purple-500/20 text-purple-400 border-purple-500/40',
+                desc: '若當前巴士站有可以直達今局「終點站」或終點鄰近 2 站的路線，可直接上車衝刺直達！若無，搭任意車 2 站。',
+                rule: '終點直衝優惠卡！'
+            },
+            {
+                id: 'c15',
+                title: '轉乘同公司路線',
+                icon: 'fa-repeat',
+                category: '轉乘任務',
+                rarity: 'Common',
+                badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+                desc: '落車後，轉乘另一條同屬一間巴士公司（如九巴轉九巴、城巴轉城巴）的路線乘搭 3 個站。',
+                rule: '善用轉乘優惠。'
+            },
+            {
+                id: 'c16',
+                title: '雙層車尾極速',
+                icon: 'fa-couch',
+                category: '座席挑戰',
+                rarity: 'Common',
+                badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+                desc: '登上巴士後，坐上層或下層最後一排位置！乘搭 3 個站落車。',
+                rule: '體驗後排感受。'
+            }
+        ];
+
+        /* ==========================================================================
+           GLOBAL GAME STATE
+           ========================================================================== */
+        let gameState = {
+            status: 'IDLE', // IDLE, RUNNING, WON, FAILED
+            startStation: '',
+            endStation: '',
+            winRule: 'exact', // 'exact' or 'pass'
+            timeLimitSeconds: 28800, // 8 hours
+            secondsRemaining: 28800,
+            timerInterval: null,
+            coins: 1,
+            activeCard: null,
+            drawnHistory: [],
+            journeyLog: [],
+            expenses: [],
+            soundEnabled: true
+        };
+
+        // Synthesized sound effects via Tone.js
+        const audioFX = {
+            playDrawSound() {
+                if (!gameState.soundEnabled) return;
+                try {
+                    const synth = new Tone.Synth().toDestination();
+                    synth.triggerAttackRelease("C5", "8n");
+                } catch(e){}
+            },
+            playVictorySound() {
+                if (!gameState.soundEnabled) return;
+                try {
+                    const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+                    const now = Tone.now();
+                    synth.triggerAttackRelease(["C4", "E4", "G4", "C5"], "4n", now);
+                } catch(e){}
+            }
+        };
+
+        /* ==========================================================================
+           INITIALIZATION & SETUP
+           ========================================================================== */
+        window.onload = function() {
+            populateStationDropdowns();
+            renderCardGallery();
+            updateUIState();
+            
+            // Try loading saved state from localStorage
+            loadSavedState();
+        };
+
+        function populateStationDropdowns() {
+            const startSelect = document.getElementById('modalStartSelect');
+            const endSelect = document.getElementById('modalEndSelect');
+            startSelect.innerHTML = '';
+            endSelect.innerHTML = '';
+
+            HK_DISTRICTS.forEach(district => {
+                const opt1 = document.createElement('option');
+                opt1.value = district;
+                opt1.textContent = district;
+                startSelect.appendChild(opt1);
+
+                const opt2 = document.createElement('option');
+                opt2.value = district;
+                opt2.textContent = district;
+                endSelect.appendChild(opt2);
+            });
+
+            // Set default non-matching districts
+            startSelect.selectedIndex = 4; // 油尖旺區
+            endSelect.selectedIndex = 11; // 屯門區
+        }
+
+        /* ==========================================================================
+           TIMER & GAME STATE LOGIC
+           ========================================================================== */
+        function startTimer() {
+            if (gameState.timerInterval) clearInterval(gameState.timerInterval);
+            gameState.timerInterval = setInterval(() => {
+                if (gameState.status === 'RUNNING') {
+                    gameState.secondsRemaining--;
+                    if (gameState.secondsRemaining <= 0) {
+                        gameState.secondsRemaining = 0;
+                        gameState.status = 'FAILED';
+                        showToast('時間完結！', '時限已到，挑戰結束。', 'fa-clock');
+                        clearInterval(gameState.timerInterval);
+                    }
+                    updateTimerDisplay();
+                    saveStateToStorage();
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const display = document.getElementById('timerDisplay');
+            const hrs = Math.floor(gameState.secondsRemaining / 3600);
+            const mins = Math.floor((gameState.secondsRemaining % 3600) / 60);
+            const secs = gameState.secondsRemaining % 60;
+            display.textContent = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function openNewGameModal() {
+            document.getElementById('newGameModal').classList.remove('hidden');
+        }
+
+        function closeNewGameModal() {
+            document.getElementById('newGameModal').classList.add('hidden');
+        }
+
+        function randomizeStartAndEnd() {
+            const startIdx = Math.floor(Math.random() * HK_DISTRICTS.length);
+            let endIdx = Math.floor(Math.random() * HK_DISTRICTS.length);
+            while (endIdx === startIdx) {
+                endIdx = Math.floor(Math.random() * HK_DISTRICTS.length);
+            }
+            document.getElementById('modalStartSelect').selectedIndex = startIdx;
+            document.getElementById('modalEndSelect').selectedIndex = endIdx;
+            showToast('隨機抽區成功！', '已自動抽取出發地區與終點地區。', 'fa-shuffle');
+        }
+
+        function confirmStartGame() {
+            const startVal = document.getElementById('modalStartSelect').value;
+            const endVal = document.getElementById('modalEndSelect').value;
+            const winRuleVal = document.querySelector('input[name="winRuleOption"]:checked').value;
+            const timeLimitVal = parseInt(document.getElementById('modalTimeLimit').value, 10);
+
+            if (startVal === endVal) {
+                showToast('起終點地區不能相同', '請選擇兩個不同的地區！', 'fa-triangle-exclamation');
+                return;
+            }
+
+            gameState.startStation = startVal;
+            gameState.endStation = endVal;
+            gameState.winRule = winRuleVal;
+            gameState.timeLimitSeconds = timeLimitVal;
+            gameState.secondsRemaining = timeLimitVal;
+            gameState.status = 'RUNNING';
+            gameState.journeyLog = [];
+            gameState.expenses = [];
+            gameState.coins = 1;
+            gameState.activeCard = null;
+            gameState.drawnHistory = [];
+
+            closeNewGameModal();
+            startTimer();
+            drawCard(); // Auto draw first card
+            updateUIState();
+            saveStateToStorage();
+            showToast('挑戰開始！', `已由 [${startVal}] 出發！祝你好運！`, 'fa-play');
+        }
+
+        /* ==========================================================================
+           VICTORY & RECAP
+           ========================================================================== */
+        function markDestinationReached() {
+            if (gameState.status !== 'RUNNING') {
+                showToast('遊戲狀態提示', '請先開始計時並執行挑戰卡！', 'fa-info-circle');
+                return;
+            }
+
+            gameState.status = 'WON';
+            clearInterval(gameState.timerInterval);
+            audioFX.playVictorySound();
+
+            try {
+                confetti({
+                    particleCount: 120,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
+            } catch(e){}
+
+            updateUIState();
+            switchTab('summary');
+            renderRecap();
+            saveStateToStorage();
+
+            showToast('恭喜通關！🎉', `您已成功由 ${gameState.startStation} 達標前往 ${gameState.endStation}！`, 'fa-trophy');
+        }
+
+        function renderRecap() {
+            const timeElapsedSec = gameState.timeLimitSeconds - gameState.secondsRemaining;
+            const hrs = Math.floor(timeElapsedSec / 3600);
+            const mins = Math.floor((timeElapsedSec % 3600) / 60);
+            const secs = timeElapsedSec % 60;
+            document.getElementById('recapDuration').textContent = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+            let totalStops = 0;
+            const routesSet = new Set();
+            gameState.journeyLog.forEach(l => {
+                totalStops += (l.stopsCount || 1);
+                if (l.route) routesSet.add(l.route);
+            });
+
+            document.getElementById('recapStops').textContent = `${totalStops} 站`;
+            document.getElementById('recapRoutes').textContent = `${routesSet.size} 條`;
+
+            let totalExp = 0;
+            gameState.expenses.forEach(e => totalExp += e.amount);
+            document.getElementById('recapExpense').textContent = `$${totalExp.toFixed(1)}`;
+
+            // Path recap text
+            const pathArr = gameState.journeyLog.map(l => `${l.route} (${l.fromStop} ➔ ${l.toStop})`);
+            const pathText = pathArr.length > 0 
+                ? `起點地區: ${gameState.startStation}\n` + pathArr.reverse().map((p, i) => `${i+1}. ${p}`).join('\n') + `\n終點地區: ${gameState.endStation}`
+                : `起點地區: ${gameState.startStation} ➔ 終點地區: ${gameState.endStation}`;
+
+            document.getElementById('recapPathText').textContent = pathText;
+        }
+
+        function copyRecapMarkdown() {
+            const pathText = document.getElementById('recapPathText').textContent;
+            const duration = document.getElementById('recapDuration').textContent;
+            const stops = document.getElementById('recapStops').textContent;
+            const expense = document.getElementById('recapExpense').textContent;
+
+            const mdText = `🚌 **【香港跨區巴士見車就上 Challenge 戰報】**\n` +
+                `📍 起點地區：${gameState.startStation}\n` +
+                `🏁 終點地區：${gameState.endStation}\n` +
+                `⏱️ 總耗時：${duration}\n` +
+                `🚏 乘搭總站數：${stops}\n` +
+                `💰 總開支：${expense}\n\n` +
+                `🗺️ **車程軌跡：**\n\`\`\`\n${pathText}\n\`\`\`\n` +
+                `#巴士見車就上 #HKBusChallenge #隨機香港探索 #18區冒險`;
+
+            try {
+                const tempTextArea = document.createElement("textarea");
+                tempTextArea.value = mdText;
+                document.body.appendChild(tempTextArea);
+                tempTextArea.select();
+                document.execCommand("copy");
+                document.body.removeChild(tempTextArea);
+                showToast('已複製紀錄 Markdown！', '您可以粘貼並分享至社群平台。', 'fa-copy');
+            } catch(e) {
+                showToast('複製失敗', '請手動選取文字複製。', 'fa-triangle-exclamation');
+            }
+        }
+
+        /* ==========================================================================
+           CARD GALLERY & RENDERERS
+           ========================================================================== */
+        function renderCardGallery() {
+            const grid = document.getElementById('galleryGrid');
+            grid.innerHTML = CARD_DECK.map(card => `
+                <div class="glass-card p-4 rounded-2xl border border-slate-800 space-y-2 hover:border-slate-700 transition">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <div class="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-amber-400 text-sm">
+                                <i class="fa-solid ${card.icon}"></i>
+                            </div>
+                            <h4 class="font-bold text-sm text-white">${card.title}</h4>
+                        </div>
+                        <span class="text-[10px] px-2 py-0.5 rounded border ${card.badgeColor}">${card.rarity}</span>
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed">${card.desc}</p>
+                    <div class="text-[10px] text-slate-400 pt-1 border-t border-slate-800">細則: ${card.rule}</div>
+                </div>
+            `).join('');
+        }
+
+        /* ==========================================================================
+           DICE ROLL MODAL
+           ========================================================================== */
+        function openDiceModal() {
+            document.getElementById('diceModal').classList.remove('hidden');
+        }
+        function closeDiceModal() {
+            document.getElementById('diceModal').classList.add('hidden');
+        }
+        function rollDiceAnim() {
+            const diceBox = document.getElementById('diceBox');
+            const resultText = document.getElementById('diceResultText');
+            let counter = 0;
+            const interval = setInterval(() => {
+                const rand = Math.floor(Math.random() * 6) + 1;
+                diceBox.textContent = rand;
+                counter++;
+                if (counter > 12) {
+                    clearInterval(interval);
+                    resultText.textContent = `🎲 命運決定！請上車搭乘 ${rand} 個站落車！`;
+                    showToast('擲骰結果', `你抽到了乘搭 ${rand} 個站！`, 'fa-dice-d6');
+                }
+            }, 80);
+        }
+
+        /* ==========================================================================
+           UI STATE & TABS MANAGEMENT
+           ========================================================================== */
+        function switchTab(tabId) {
+            document.querySelectorAll('main > section').forEach(sec => sec.classList.add('hidden'));
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active', 'text-amber-400', 'bg-slate-800/90');
+                btn.classList.add('text-slate-400');
+            });
+            const activeBtn = document.getElementById(`tabBtn-${tabId}`);
+            if (activeBtn) {
+                activeBtn.classList.add('active', 'text-amber-400', 'bg-slate-800/90');
+                activeBtn.classList.remove('text-slate-400');
+            }
+
+            if (tabId === 'summary') renderRecap();
+        }
+
+        function updateUIState() {
+            document.getElementById('startStationDisplay').textContent = gameState.startStation || '未設定';
+            document.getElementById('endStationDisplay').textContent = gameState.endStation || '未設定';
+            document.getElementById('logCountBadge').textContent = gameState.journeyLog.length;
+
+            const badge = document.getElementById('gameStatusBadge');
+            if (gameState.status === 'RUNNING') {
+                badge.textContent = '進行中';
+                badge.className = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-xs px-2.5 py-0.5 rounded-full font-semibold';
+            } else if (gameState.status === 'WON') {
+                badge.textContent = '已通關 🎉';
+                badge.className = 'bg-amber-500/20 text-amber-400 border border-amber-500/40 text-xs px-2.5 py-0.5 rounded-full font-semibold';
+            } else if (gameState.status === 'FAILED') {
+                badge.textContent = '超時失敗 ⏰';
+                badge.className = 'bg-red-500/20 text-red-400 border border-red-500/40 text-xs px-2.5 py-0.5 rounded-full font-semibold';
+            } else {
+                badge.textContent = '未開始';
+                badge.className = 'bg-slate-800 text-slate-400 border border-slate-700 text-xs px-2.5 py-0.5 rounded-full font-semibold';
+            }
+
+            document.getElementById('winRuleBadge').textContent = gameState.winRule === 'exact' ? '要啱啱好到終點先贏' : '經過終點即可當贏';
+
+            renderJourneyTimeline();
+            renderExpenses();
+            updateTimerDisplay();
+        }
+
+        function toggleAudio() {
+            gameState.soundEnabled = !gameState.soundEnabled;
+            const btn = document.getElementById('audioToggleBtn');
+            btn.innerHTML = gameState.soundEnabled 
+                ? `<i class="fa-solid fa-volume-high text-amber-400"></i>`
+                : `<i class="fa-solid fa-volume-xmark text-slate-500"></i>`;
+            showToast('音效設定', gameState.soundEnabled ? '音效已開啟' : '靜音模式已開啟', 'fa-volume-high');
+        }
+
+        /* ==========================================================================
+           TOAST NOTIFICATIONS
+           ========================================================================== */
+        let toastTimeout = null;
+        function showToast(title, message, iconClass = 'fa-info-circle') {
+            const toast = document.getElementById('toastNotification');
+            document.getElementById('toastTitle').textContent = title;
+            document.getElementById('toastMessage').textContent = message;
+            document.getElementById('toastIcon').innerHTML = `<i class="fa-solid ${iconClass}"></i>`;
+
+            toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
+
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+            }, 3500);
+        }
+
+        /* ==========================================================================
+           LOCAL STORAGE PERSISTENCE
+           ========================================================================== */
+        function saveStateToStorage() {
+            try {
+                localStorage.setItem('hk_bus_challenge_state', JSON.stringify({
+                    status: gameState.status,
+                    startStation: gameState.startStation,
+                    endStation: gameState.endStation,
+                    winRule: gameState.winRule,
+                    timeLimitSeconds: gameState.timeLimitSeconds,
+                    secondsRemaining: gameState.secondsRemaining,
+                    coins: gameState.coins,
+                    activeCard: gameState.activeCard,
+                    journeyLog: gameState.journeyLog,
+                    expenses: gameState.expenses
+                }));
+            } catch(e){}
+        }
+
+        function loadSavedState() {
+            try {
+                const saved = localStorage.getItem('hk_bus_challenge_state');
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    gameState.status = data.status || 'IDLE';
+                    gameState.startStation = data.startStation || '';
+                    gameState.endStation = data.endStation || '';
+                    gameState.winRule = data.winRule || 'exact';
+                    gameState.timeLimitSeconds = data.timeLimitSeconds || 28800;
+                    gameState.secondsRemaining = data.secondsRemaining || 28800;
+                    gameState.coins = data.coins || 1;
+                    gameState.activeCard = data.activeCard || null;
+                    gameState.journeyLog = data.journeyLog || [];
+                    gameState.expenses = data.expenses || [];
+
+                    if (gameState.status === 'RUNNING') startTimer();
+                    if (gameState.activeCard) renderActiveCard();
+                    updateUIState();
+                }
+            } catch(e){}
+        }
+    </script>
+</body>
+</html>
